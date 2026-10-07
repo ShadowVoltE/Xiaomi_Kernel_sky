@@ -1,0 +1,68 @@
+name: Build Aegis OS Kernel (Poco M6 Pro 5G)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    name: Compile Kernel & Package AnyKernel3
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          ref: sky-t-oss
+
+      - name: Setup Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libncurses5-dev \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip curl wget git ccache
+
+      - name: Download Clang Toolchain (Android 13 Base)
+        run: |
+          mkdir -p clang
+          cd clang
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-13.0.0_r0.13/clang-r450784d.tar.gz
+          tar -xzf clang-r450784d.tar.gz
+          rm -f clang-r450784d.tar.gz
+          cd ..
+
+      - name: Compile Kernel Image
+        run: |
+          export PATH="$(pwd)/clang/bin:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+
+          # Defconfig generation and merge
+          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- gki_defconfig
+          ./scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/sky_GKI.config
+          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- olddefconfig
+
+          # Compile Kernel
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- Image.gz || \
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- Image
+
+      - name: Package Flashable AnyKernel3 Zip
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+
+          if [ -f out/arch/arm64/boot/Image.gz ]; then
+            cp out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
+          elif [ -f out/arch/arm64/boot/Image ]; then
+            cp out/arch/arm64/boot/Image AnyKernel3/Image
+          fi
+
+          cd AnyKernel3
+          zip -r9 ../AegisOS-Kernel-sky-Official.zip * -x .git README.md *placeholder
+          cd ..
+
+      - name: Upload Kernel Zip Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AegisOS-Kernel-PocoM6Pro-5G
+          path: AegisOS-Kernel-sky-Official.zip
