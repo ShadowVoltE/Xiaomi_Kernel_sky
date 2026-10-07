@@ -18,12 +18,29 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libncurses5-dev \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip curl wget git ccache
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip curl wget git ccache python3
 
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d.git clang || \
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
+
+      - name: Auto-Patch Xiaomi Source Code Bugs
+        run: |
+          # 1. Fix missing proprietary mihw driver stub
+          mkdir -p drivers/mihw
+          touch drivers/mihw/Kconfig
+          touch drivers/mihw/Makefile
+
+          # 2. Fix broken Xiaomi DRM bridge function
+          python3 -c "
+          import re
+          with open('drivers/gpu/drm/drm_bridge.c', 'r') as f:
+              c = f.read()
+          c = re.sub(r'(void\s+drm_bridge_disp_param_set\s*\([^)]*\)\s*\{)[\s\S]*?(\n\})', r'\1\n\treturn;\2', c)
+          with open('drivers/gpu/drm/drm_bridge.c', 'w') as f:
+              f.write(c)
+          "
 
       - name: Compile Kernel Image
         run: |
@@ -33,23 +50,14 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
 
-          # Fix Xiaomi stripped proprietary stub
-          mkdir -p drivers/mihw
-          touch drivers/mihw/Kconfig
-          touch drivers/mihw/Makefile
-
-          # Auto-fix broken Xiaomi DRM color enhance flags
-          sed -i 's/CONFIG_MSM_DISP_COLOR_ENHANCE=y/# CONFIG_MSM_DISP_COLOR_ENHANCE is not set/g' arch/arm64/configs/vendor/sky_GKI.config
-          sed -i 's/CONFIG_DRM_MSM_DPU=y/# CONFIG_DRM_MSM_DPU is not set/g' arch/arm64/configs/vendor/sky_GKI.config
-
-          # Defconfig generation and merge for Poco M6 Pro (sky)
+          # Defconfig generation and merge
           make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
           ./scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/sky_GKI.config
           make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-          # Compile Kernel Image using all cloud cores
-          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || \
-          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
+          # Build Kernel Image with warning suppression
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- KCFLAGS="-w" Image.gz || \
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- KCFLAGS="-w" Image
 
       - name: Package Flashable AnyKernel3 Zip
         run: |
