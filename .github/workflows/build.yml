@@ -20,14 +20,10 @@ jobs:
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libncurses5-dev \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi zip curl wget git ccache
 
-      - name: Download Clang Toolchain (Android 13 Base)
+      - name: Download Clang Toolchain
         run: |
-          mkdir -p clang
-          cd clang
-          curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2022/clang-r450784d.tar.gz"
-          tar -xzf clang-r450784d.tar.gz
-          rm -f clang-r450784d.tar.gz
-          cd ..
+          git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d.git clang || \
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
 
       - name: Compile Kernel Image
         run: |
@@ -37,14 +33,14 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
 
-          # Defconfig generation and merge
-          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- gki_defconfig
+          # Defconfig generation and merge for Poco M6 Pro (sky)
+          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
           ./scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/sky_GKI.config
-          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- olddefconfig
+          make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-          # Compile Kernel
-          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- Image.gz || \
-          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- Image
+          # Compile Kernel Image using all cloud cores
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || \
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
 
       - name: Package Flashable AnyKernel3 Zip
         run: |
