@@ -33,6 +33,11 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CLANG_TRIPLE=aarch64-linux-gnu-
 
+          # Fix Xiaomi stripped proprietary stub
+          mkdir -p drivers/mihw
+          touch drivers/mihw/Kconfig
+          touch drivers/mihw/Makefile
+
           # Defconfig generation and merge for Poco M6 Pro (sky)
           make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
           ./scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/sky_GKI.config
