@@ -38,6 +38,10 @@ jobs:
           touch drivers/mihw/Kconfig
           touch drivers/mihw/Makefile
 
+          # Auto-fix broken Xiaomi DRM color enhance flags
+          sed -i 's/CONFIG_MSM_DISP_COLOR_ENHANCE=y/# CONFIG_MSM_DISP_COLOR_ENHANCE is not set/g' arch/arm64/configs/vendor/sky_GKI.config
+          sed -i 's/CONFIG_DRM_MSM_DPU=y/# CONFIG_DRM_MSM_DPU is not set/g' arch/arm64/configs/vendor/sky_GKI.config
+
           # Defconfig generation and merge for Poco M6 Pro (sky)
           make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- gki_defconfig
           ./scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/vendor/sky_GKI.config
